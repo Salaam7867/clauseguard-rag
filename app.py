@@ -4,7 +4,7 @@ import hashlib
 import streamlit as st
 
 from src.config.settings import APP_CAPTION, APP_TITLE, SUGGESTED_QUESTIONS, CANDIDATE_POOL_K
-from src.generation.answer import generate_answer, load_llm
+from src.generation.answer import generate_query_plan, generate_answer, load_llm
 from src.ingestion.pdf_processor import process_pdf_bytes
 from src.retrieval.qdrant_manager import (
     get_qdrant_client,
@@ -159,40 +159,70 @@ for msg in st.session_state["messages"]:
         if msg["role"] == "assistant" and "caption" in msg:
             st.caption(msg["caption"])
 
-            with st.expander("Retrieved context"):
-                st.caption(f"Context sent to LLM: {len(msg['context']):,} characters")
-                st.text(msg["context"])
+            if msg.get("context"):
+                with st.expander("Retrieved context"):
+                    st.caption(f"Context sent to LLM: {len(msg['context']):,} characters")
+                    st.text(msg["context"])
 
-            with st.expander("Sources"):
-                for rank, hit in enumerate(msg["sources"], start=1):
-                    st.write(
-                        f"**Source {rank}** | "
-                        f"Document: {hit['doc_name']} | "
-                        f"Page: {hit['page_number']} | "
-                        f"Re-rank Score: {hit['rerank_score']:.4f}"
-                    )
-                    st.write(hit["text"][:400])
-                    st.divider()
+            if msg.get("sources"):
+                with st.expander("Sources"):
+                    for rank, hit in enumerate(msg["sources"], start=1):
+                        st.write(
+                            f"**Source {rank}** | "
+                            f"Document: {hit['doc_name']} | "
+                            f"Page: {hit['page_number']} | "
+                            f"Re-rank Score: {hit['rerank_score']:.4f}"
+                        )
+                        st.write(hit["text"][:400])
+                        st.divider()
 
 # 3. Accept input from either the bottom chat bar OR your sidebar Demo Prompt buttons
 question = st.chat_input("Ask a question...") or st.session_state.pop("question_text", None)
 
 if question and question.strip():
+    # Grab last 4 messages BEFORE appending the current question
+    recent_history = st.session_state["messages"][-4:]
+
     # Display and save the user message immediately
     with st.chat_message("user"):
         st.markdown(question)
     st.session_state["messages"].append({"role": "user", "content": question})
 
     try:
+        # 1. Run the Router / Contextualizer
+        with st.spinner("Analyzing query and routing..."):
+            plan = generate_query_plan(question, recent_history, active_docs, llm)
+
+        # 2. Fast Path: Answered directly from conversation history (0 Qdrant calls)
+        if not plan.needs_retrieval and plan.direct_answer:
+            direct_caption = "Answered directly from conversation history (skipped vector retrieval)."
+            with st.chat_message("assistant"):
+                st.markdown(plan.direct_answer)
+                st.caption(direct_caption)
+
+            st.session_state["messages"].append(
+                {
+                    "role": "assistant",
+                    "content": plan.direct_answer,
+                    "caption": direct_caption,
+                }
+            )
+            st.stop()
+
+        # 3. Filter active_docs to ONLY the documents selected by the router
+        docs_to_search = [
+            doc for doc in active_docs if doc["file_name"] in plan.target_documents
+        ]
+
         all_hits = []
         final_hits = []
         total_candidates = 0
 
-        # Retrieve and Re-Rank independently for each PDF
-        for doc in active_docs:
+        # Retrieve and Re-Rank using plan.search_query on docs_to_search
+        for doc in docs_to_search:
             document_hits = hybrid_search(
                 client=qdrant_client,
-                query_text=question,
+                query_text=plan.search_query,
                 doc_hash=doc["file_hash"],
                 limit=CANDIDATE_POOL_K,
             )
@@ -202,12 +232,12 @@ if question and question.strip():
 
             if document_hits:
                 with st.spinner(f"Re-ranking evidence for {doc['file_name']}..."):
-                    top_doc_hits = rerank_hits(question, document_hits, top_k=3)
+                    top_doc_hits = rerank_hits(plan.search_query, document_hits, top_k=3)
                     final_hits.extend(top_doc_hits)
 
         if not final_hits:
             with st.chat_message("assistant"):
-                st.warning("No relevant content found in the uploaded PDFs.")
+                st.warning("No relevant content found in the targeted PDFs.")
             st.stop()
 
         # Sort the combined final_hits by re-rank score
@@ -220,17 +250,17 @@ if question and question.strip():
             for hit in final_hits
         )
 
-        # Generate and display the assistant response inside a chat bubble
+        # Generate and display the assistant response using the rewritten standalone query
         with st.chat_message("assistant"):
             with st.spinner("Generating answer..."):
-                answer = generate_answer(context, question, llm)
+                answer = generate_answer(context, plan.search_query, llm)
 
             st.markdown(answer)
 
+            routed_names = ", ".join(plan.target_documents)
             stats_caption = (
-                f"Retrieved {len(all_hits)} candidates across "
-                f"{len(active_docs)} documents. "
-                f"Selected {len(final_hits)} chunks after per-document reranking."
+                f"Query: '{plan.search_query}' | Routed to: [{routed_names}] | "
+                f"Retrieved {len(all_hits)} candidates → Selected {len(final_hits)} chunks."
             )
             st.caption(stats_caption)
 
