@@ -4,8 +4,8 @@ APP_TITLE = "InsightRAG"
 APP_CAPTION = "Context-Aware Multi-Document & Hybrid RAG Assistant"
 
 # Chunking settings (enlarged to preserve clause and paragraph context)
-CHUNK_SIZE = 800
-CHUNK_OVERLAP = 120
+CHUNK_SIZE = 1500
+CHUNK_OVERLAP = 200
 
 # Retrieval & Re-ranking counts
 CANDIDATE_POOL_K = 15  # Candidates retrieved from Hybrid Search (Dense + Sparse)

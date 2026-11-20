@@ -77,20 +77,25 @@ def generate_query_plan(
     doc_catalog = "\n".join(f"- {name}" for name in all_doc_names)
 
     prompt = (
-        "You are a query routing and analysis assistant for a financial document RAG system.\n"
+        "You are a query routing assistant for a financial document RAG system.\n"
         "Analyze the User Question against the Chat History and Available Documents:\n\n"
-        "1. If the user is asking to explain, clarify, recalculate, or summarize your previous answer "
-        "AND the attached retrieved context in Chat History already has all facts needed: "
-        "set needs_retrieval=False and write the complete grounded answer in direct_answer "
-        "(using ONLY facts/figures from the Chat History and attached context).\n"
-        "2. Otherwise, set needs_retrieval=True, leave direct_answer=None, rewrite the question "
-        "into a standalone search_query (resolving pronouns like 'their', 'it', 'that period'), "
-        "and select the relevant filename(s) from Available Documents into target_documents.\n\n"
+        "RULES:\n"
+        "1. Set needs_retrieval=False ONLY if the user is explicitly asking about your previous "
+        "assistant message itself (e.g., 'why did you say 14%?', 'explain your last calculation', "
+        "'summarize your previous answer in 3 bullets'). NEVER set needs_retrieval=False for a "
+        "new factual metric lookup or a cross-document question, even if the number happens to "
+        "appear in earlier context.\n"
+        "2. If needs_retrieval=False, write the grounded answer in direct_answer using ONLY the "
+        "Chat History and its attached context.\n"
+        "3. If needs_retrieval=True, leave direct_answer=None.\n"
+        "4. For search_query: ONLY resolve pronouns (like 'their', 'it', 'that quarter') using "
+        "Chat History. Keep search_query short and focused on the financial metric. "
+        "DO NOT append document filenames, company legal suffixes, or 'consolidated financial statements'.\n"
+        "5. For target_documents: select the exact relevant filename(s) from Available Documents.\n\n"
         f"Available Documents:\n{doc_catalog}\n\n"
         f"Chat History:\n{history_text}\n\n"
         f"User Question: {question}"
     )
-
     try:
         structured_llm = llm.with_structured_output(QueryPlan)
         plan = structured_llm.invoke([HumanMessage(content=prompt)])
