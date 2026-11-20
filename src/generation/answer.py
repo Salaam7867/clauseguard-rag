@@ -65,13 +65,11 @@ def generate_query_plan(
             target_documents=all_doc_names,
         )
 
-    # Include previous messages + the retrieved context from the last assistant turn
-    turns = []
-    for msg in chat_history[-4:]:
-        entry = f"{msg['role'].capitalize()}: {msg['content']}"
-        if msg["role"] == "assistant" and msg.get("context"):
-            entry += f"\n[Retrieved Context Used For That Answer:\n{msg['context']}\n]"
-        turns.append(entry)
+    # Only include conversational text—never raw PDF chunks from previous turns
+    turns = [
+        f"{msg['role'].capitalize()}: {msg['content']}"
+        for msg in chat_history[-4:]
+    ]
 
     history_text = "\n\n".join(turns) if turns else "No previous conversation."
     doc_catalog = "\n".join(f"- {name}" for name in all_doc_names)

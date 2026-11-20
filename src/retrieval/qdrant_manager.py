@@ -57,6 +57,8 @@ def init_collection(client: QdrantClient) -> None:
 
 def document_exists(client: QdrantClient, doc_hash: str) -> bool:
     """Check whether a document is already indexed in Qdrant."""
+    if not client.collection_exists(QDRANT_COLLECTION_NAME):
+        return False
 
     result = client.count(
         collection_name=QDRANT_COLLECTION_NAME,
