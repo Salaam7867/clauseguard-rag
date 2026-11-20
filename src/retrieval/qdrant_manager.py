@@ -87,6 +87,9 @@ def index_chunks(
     if not chunks:
         return
 
+    if not client.collection_exists(QDRANT_COLLECTION_NAME):
+        init_collection(client)
+
     # 1. Delete old stale chunks for this document hash if re-uploading
     try:
         client.delete(
