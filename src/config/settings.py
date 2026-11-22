@@ -1,7 +1,7 @@
 """Central configuration for the InsightRAG pipeline."""
 
 APP_TITLE = "InsightRAG"
-APP_CAPTION = "Context-Aware Multi-Document & Hybrid RAG Assistant"
+APP_CAPTION = "Multi-Document Contract, Policy & Compliance Auditing Assistant (Hybrid RAG + Agentic Routing)"
 
 # Chunking settings (enlarged to preserve clause and paragraph context)
 CHUNK_SIZE = 900
@@ -22,8 +22,9 @@ QDRANT_COLLECTION_NAME = "insight_documents"
 DENSE_VECTOR_SIZE = 384  # Dimension for all-MiniLM-L6-v2
 
 SUGGESTED_QUESTIONS = [
-    "Summarize this document in 5 bullet points.",
-    "What are the key obligations and SLAs specified?",
-    "Identify any penalties, liabilities, or termination clauses.",
-    "What are the primary technical specifications or requirements?",
+    "Compare data breach and security incident notification obligations across the uploaded policies and vendor agreements. Highlight any gaps.",
+    "Compare post-termination data return and deletion obligations across the vendor agreements.",
+    "Which vendor imposes stricter restrictions on customer audit rights, and what are the exact limits?",
+    "How do the vendors' security controls align with the governance and protection goals in the compliance framework?",
+    "What is the guaranteed monthly uptime SLA percentage and service credit refund schedule?",
 ]
