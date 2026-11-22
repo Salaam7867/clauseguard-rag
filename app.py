@@ -181,7 +181,7 @@ question = st.chat_input("Ask a question...") or st.session_state.pop("question_
 
 if question and question.strip():
     # Grab last 4 messages BEFORE appending the current question
-    recent_history = st.session_state["messages"][-4:]
+    recent_history = st.session_state["messages"][-10:]
 
     # Display and save the user message immediately
     with st.chat_message("user"):
@@ -231,8 +231,9 @@ if question and question.strip():
             all_hits.extend(document_hits)
 
             if document_hits:
+                per_doc_k = 5 if len(docs_to_search) == 1 else 4
                 with st.spinner(f"Re-ranking evidence for {doc['file_name']}..."):
-                    top_doc_hits = rerank_hits(plan.search_query, document_hits, top_k=3)
+                    top_doc_hits = rerank_hits(plan.search_query, document_hits, top_k=per_doc_k)
                     final_hits.extend(top_doc_hits)
 
         if not final_hits:
@@ -250,10 +251,10 @@ if question and question.strip():
             for hit in final_hits
         )
 
-        # Generate and display the assistant response using the rewritten standalone query
+        # Generate and display the assistant response using the full standalone question
         with st.chat_message("assistant"):
             with st.spinner("Generating answer..."):
-                answer = generate_answer(context, plan.search_query, llm)
+                answer = generate_answer(context, plan.standalone_question, llm)
 
             st.markdown(answer)
 

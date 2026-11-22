@@ -37,7 +37,16 @@ class QueryPlan(BaseModel):
         )
     )
     search_query: str = Field(
-        description="Standalone search query with pronouns resolved from chat history."
+        description=(
+            "Short, keyword-focused search query for vector/BM25 retrieval. "
+            "Must include ALL metrics, entities, and time periods mentioned."
+        )
+    )
+    standalone_question: str = Field(
+        description=(
+            "Complete, self-contained version of the user's question with pronouns resolved "
+            "from chat history, preserving all instructions (e.g., compare, calculate percentage, explain)."
+        )
     )
     target_documents: list[str] = Field(
         description="Exact filenames from the catalog relevant to the question."
@@ -62,34 +71,37 @@ def generate_query_plan(
             needs_retrieval=True,
             direct_answer=None,
             search_query=question,
+            standalone_question=question,
             target_documents=all_doc_names,
         )
 
     # Only include conversational text—never raw PDF chunks from previous turns
     turns = [
         f"{msg['role'].capitalize()}: {msg['content']}"
-        for msg in chat_history[-4:]
+        for msg in chat_history[-10:]
     ]
 
     history_text = "\n\n".join(turns) if turns else "No previous conversation."
     doc_catalog = "\n".join(f"- {name}" for name in all_doc_names)
 
     prompt = (
-        "You are a query routing assistant for a financial document RAG system.\n"
+        "You are a query routing assistant for a multi-document RAG system.\n"
         "Analyze the User Question against the Chat History and Available Documents:\n\n"
         "RULES:\n"
-        "1. Set needs_retrieval=False ONLY if the user is explicitly asking about your previous "
-        "assistant message itself (e.g., 'why did you say 14%?', 'explain your last calculation', "
-        "'summarize your previous answer in 3 bullets'). NEVER set needs_retrieval=False for a "
-        "new factual metric lookup or a cross-document question, even if the number happens to "
-        "appear in earlier context.\n"
-        "2. If needs_retrieval=False, write the grounded answer in direct_answer using ONLY the "
-        "Chat History and its attached context.\n"
+        "1. Set needs_retrieval=False ONLY if the user is greeting you, asking about your capabilities, "
+        "or asking to explain, calculate from, or summarize numbers/facts already stated in Chat History "
+        "(e.g., 'why did you say 14%?', 'explain your last calculation', 'which of those two is higher?'). "
+        "NEVER set needs_retrieval=False for a new factual lookup from the documents.\n"
+        "2. If needs_retrieval=False, write the grounded answer in direct_answer using ONLY Chat History.\n"
         "3. If needs_retrieval=True, leave direct_answer=None.\n"
-        "4. For search_query: ONLY resolve pronouns (like 'their', 'it', 'that quarter') using "
-        "Chat History. Keep search_query short and focused on the financial metric. "
-        "DO NOT append document filenames, company legal suffixes, or 'consolidated financial statements'.\n"
-        "5. For target_documents: select the exact relevant filename(s) from Available Documents.\n\n"
+        "4. For search_query: write a concise keyword query for retrieval with pronouns resolved from Chat History. "
+        "Preserve ALL metrics/topics asked about (e.g., if comparing Net Income and Operating Income, include BOTH). "
+        "DO NOT append document filenames or filler words.\n"
+        "5. For standalone_question: rewrite the full user request into a self-contained question with pronouns "
+        "resolved, keeping every requested action (e.g., compare, calculate percentage change, breakdown).\n"
+        "6. For target_documents: select ALL exact filenames from Available Documents needed to answer "
+        "standalone_question (for follow-up comparisons like 'How does that compare to X?', select BOTH the "
+        "previously discussed document and X).\n\n"
         f"Available Documents:\n{doc_catalog}\n\n"
         f"Chat History:\n{history_text}\n\n"
         f"User Question: {question}"
@@ -104,6 +116,7 @@ def generate_query_plan(
                 needs_retrieval=False,
                 direct_answer=plan.direct_answer.strip(),
                 search_query=question,
+                standalone_question=question,
                 target_documents=[],
             )
 
@@ -115,6 +128,7 @@ def generate_query_plan(
             needs_retrieval=True,
             direct_answer=None,
             search_query=plan.search_query.strip() or question,
+            standalone_question=plan.standalone_question.strip() or question,
             target_documents=valid_targets,
         )
     except Exception:
@@ -122,6 +136,7 @@ def generate_query_plan(
             needs_retrieval=True,
             direct_answer=None,
             search_query=question,
+            standalone_question=question,
             target_documents=all_doc_names,
         )
     
