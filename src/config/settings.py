@@ -1,6 +1,6 @@
 """Central configuration for the InsightRAG pipeline."""
 
-APP_TITLE = "InsightRAG"
+APP_TITLE = "ClauseGuard"
 APP_CAPTION = "Multi-Document Contract, Policy & Compliance Auditing Assistant (Hybrid RAG + Agentic Routing)"
 
 # Chunking settings (enlarged to preserve clause and paragraph context)
